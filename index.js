@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const fs = require('fs');
 
-// Hardcoded URLs
+// URLs to scrape
 const urls = [
     "https://www.bseindia.com/stock-share-price/debt-other/scripcode/532922/937803/",
     "https://www.bseindia.com/stock-share-price/debt-other/scripcode/532922/937495/",
@@ -22,8 +22,14 @@ const csvWriter = createCsvWriter({
     ]
 });
 
+// Puppeteer launch configuration for M3 Macs
 async function getDebtRates() {
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // Path to your local Chrome
+        headless: true, // Run in headless mode
+        args: ['--no-sandbox', '--disable-setuid-sandbox'] // Required for some macOS environments
+    });
+
     const page = await browser.newPage();
     const results = [];
 
@@ -38,7 +44,7 @@ async function getDebtRates() {
                 return null;
             });
 
-            results.push({ url, rate });
+            results.push({ url, rate: rate || 'Not Found' });
             console.log(`Fetched rate for ${url}: ${rate}`);
         } catch (error) {
             console.error(`Error fetching data for URL ${url}: ${error}`);
@@ -50,17 +56,15 @@ async function getDebtRates() {
     return results;
 }
 
+// Update CSV logic
 async function updateCsv() {
     const rates = await getDebtRates();
 
-    // Check if the CSV file exists
     if (fs.existsSync(csvPath)) {
-        // Read the existing CSV file
         const existingData = await fs.promises.readFile(csvPath, 'utf8');
         const lines = existingData.split('\n');
         const updatedLines = [lines[0]]; // Keep the header line
 
-        // Update the CSV data with new rates
         for (const line of lines.slice(1)) {
             if (line.trim() === '') continue;
             const [url, oldRate] = line.split(',');
@@ -68,14 +72,13 @@ async function updateCsv() {
             updatedLines.push(`${url},${updatedRate}`);
         }
 
-        // Write the updated lines back to the CSV file
         await fs.promises.writeFile(csvPath, updatedLines.join('\n'), 'utf8');
     } else {
-        // If the CSV file doesn't exist, create it
         await csvWriter.writeRecords(rates);
     }
 
     console.log('Updated CSV: debt_rates.csv');
 }
 
-setInterval(updateCsv, 30000);  // Run every 30 seconds
+// Schedule the script to run every 30 seconds
+setInterval(updateCsv, 60000); // Runs every 30 seconds
